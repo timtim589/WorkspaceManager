@@ -1,8 +1,9 @@
-﻿################################################################################################################
+################################################################################################################
 ### Creator: Tim Groothuis
 ### Date: 2023/06/12
-### Version: 0.1
+### Version: 1.0
 ### Description: This script is used to deploy infrastructure to play around with Sentinel's Workspace Manager
+###              dnd invoke the different Workspace Manager API's to demonstrate their function
 ###
 ################################################################################################################
 
@@ -46,7 +47,7 @@ $WorkspaceManagerAssignmentName = "WorkspaceManagerDemoAssignment"
 
 ### Creating the Resource Group
 Write-Host "--- Creating the ResourceGroup ---"
-New-AzResourceGroup -Name $ResourceGroupName -Location $Location
+New-AzResourceGroup -Name $ResourceGroupName -Location $Location | Out-Null
 Write-Host "--- Finished creating the ResourceGroup ---"
 
 ### Creating Master Sentinel
@@ -95,11 +96,6 @@ if($response.properties.mode -eq "Enabled"){
 }
 
 ##### Joining another workspace as a member workspace #####
-### Listing current members, outcome should be empty
-$response = Invoke-AzRest -Method GET -Uri "https://management.azure.com/subscriptions/$SubscriptionID/resourceGroups/$ResourceGroupName/providers/Microsoft.OperationalInsights/workspaces/$MasterSentinelName/providers/Microsoft.SecurityInsights/workspaceManagerMembers/?api-version=2023-05-01-preview" 
-$response = $response.content | ConvertFrom-Json
-$response.value[0]
-
 ### Adding the childworkspace as a member to the master workspace. Note that the documentation mentions the property targetWorkspaceId, but in actuallity the expected property for the API is targetWorkspaceResourceId
 $Body = @"
 {
@@ -110,13 +106,13 @@ $Body = @"
 }
 "@
 $response = Invoke-AzRest -Method PUT -Payload $Body -Uri "https://management.azure.com/subscriptions/$SubscriptionID/resourceGroups/$ResourceGroupName/providers/Microsoft.OperationalInsights/workspaces/$MasterSentinelName/providers/Microsoft.SecurityInsights/workspaceManagerMembers/$ChildSentinelName`?api-version=2023-05-01-preview"
-$response = $response.content | ConvertFrom-Json
-$response.value[0]
+if($response.StatusCode -eq 200){
+    "Child Workspace added successfully"
+} else {
+    "ERROR: Failed to add child workspace"
+}
 
 ##### Creating a Workspace Manager Group #####
-### Listing the current groups, outcome should be empty
-Invoke-AzRest -Method GET -Uri "https://management.azure.com/subscriptions/$SubscriptionID/resourceGroups/$ResourceGroupName/providers/Microsoft.OperationalInsights/workspaces/$MasterSentinelName/providers/Microsoft.SecurityInsights/workspaceManagerGroups?api-version=2023-05-01-preview"
-
 ### Creating a Workspace Manager Group
 $Body = @"
 {
@@ -129,12 +125,14 @@ $Body = @"
   }
 }
 "@
-Invoke-AzRest -Method PUT -Payload $Body -Uri "https://management.azure.com/subscriptions/$SubscriptionID/resourceGroups/$ResourceGroupName/providers/Microsoft.OperationalInsights/workspaces/$MasterSentinelName/providers/Microsoft.SecurityInsights/workspaceManagerGroups/$WorkspaceManagerGroupName`?api-version=2023-05-01-preview"
+$response = Invoke-AzRest -Method PUT -Payload $Body -Uri "https://management.azure.com/subscriptions/$SubscriptionID/resourceGroups/$ResourceGroupName/providers/Microsoft.OperationalInsights/workspaces/$MasterSentinelName/providers/Microsoft.SecurityInsights/workspaceManagerGroups/$WorkspaceManagerGroupName`?api-version=2023-05-01-preview"
+if($response.StatusCode -eq 200){
+    "Child Workspace successfully added to Workspace Manager Group"
+} else {
+    "ERROR: Failed to add child workspace to Workspace Manager Group"
+}
 
 ##### Assigning the content that needs to be pushed to child workspaces #####
-### Listing current assignments, outcome should be empty
-Invoke-AzRest -Method GET -Uri "https://management.azure.com/subscriptions/$SubscriptionID/resourceGroups/$ResourceGroupName/providers/Microsoft.OperationalInsights/workspaces/$MasterSentinelName/providers/Microsoft.SecurityInsights/workspaceManagerAssignments?api-version=2023-05-01-preview"
-
 ### Getting the previously deployed Alert rule, because we'll need to supply the ID in the assignment:
 # Getting all alert rules inside our master Sentinel
 $alertRules = Get-AzSentinelAlertRule -ResourceGroupName $ResourceGroupName -WorkspaceName $MasterSentinelName
@@ -154,21 +152,33 @@ $Body = @"
   }
 }
 "@
-Invoke-AzRest -Method PUT -Payload $Body -Uri "https://management.azure.com/subscriptions/$SubscriptionID/resourceGroups/$ResourceGroupName/providers/Microsoft.OperationalInsights/workspaces/$MasterSentinelName/providers/Microsoft.SecurityInsights/workspaceManagerAssignments/$WorkspaceManagerAssignmentName`?api-version=2023-05-01-preview"
+$response = Invoke-AzRest -Method PUT -Payload $Body -Uri "https://management.azure.com/subscriptions/$SubscriptionID/resourceGroups/$ResourceGroupName/providers/Microsoft.OperationalInsights/workspaces/$MasterSentinelName/providers/Microsoft.SecurityInsights/workspaceManagerAssignments/$WorkspaceManagerAssignmentName`?api-version=2023-05-01-preview"
+if($response.StatusCode -eq 200){
+    "Succesfully added Analytic rule as assignment content"
+} else {
+    "ERROR: Failed to add Analytic rule as assignment content"
+}
 
 ##### Publishing the content to child workspaces #####
-### Getting all assignment jobs (publication pushes), should be empty
-Invoke-AzRest -Method GET -Uri "https://management.azure.com/subscriptions/$SubscriptionID/resourceGroups/$ResourceGroupName/providers/Microsoft.OperationalInsights/workspaces/$MasterSentinelName/providers/Microsoft.SecurityInsights/workspaceManagerAssignments/$WorkspaceManagerAssignmentName/jobs?api-version=2023-05-01-preview"
-
 ### Creating an assignment job (AKA, publishing the content)
-$AssignmentJob = Invoke-AzRest -Method POST -Uri "https://management.azure.com/subscriptions/$SubscriptionID/resourceGroups/$ResourceGroupName/providers/Microsoft.OperationalInsights/workspaces/$MasterSentinelName/providers/Microsoft.SecurityInsights/workspaceManagerAssignments/$WorkspaceManagerAssignmentName/jobs?api-version=2023-05-01-preview"
-$AssignmentJob = $AssignmentJob.Content | ConvertFrom-Json
-$AssignmentJobName = $AssignmentJob.Name # We want to save the name of our job, because we need to reference the name to check the status
+$response = Invoke-AzRest -Method POST -Uri "https://management.azure.com/subscriptions/$SubscriptionID/resourceGroups/$ResourceGroupName/providers/Microsoft.OperationalInsights/workspaces/$MasterSentinelName/providers/Microsoft.SecurityInsights/workspaceManagerAssignments/$WorkspaceManagerAssignmentName/jobs?api-version=2023-05-01-preview"
+if($response.StatusCode -eq 200){
+    "Succesfully triggered assignment job (content sync)"
+} else {
+    "ERROR: Failed to trigger assignment job (content sync)"
+}
+$AssignmentJobName = ($response.Content | ConvertFrom-Json).Name # We want to save the name of our job, because we need to reference the name to check the status
 
 # Waiting for 10 seconds before checking if our Assignment job has finished running
+Write-Host "Sleeping for 10 seconds, allowing the assignmenrt job to finish running"
 Sleep 10
 
 ### Checking our Assignment Job Name
 $response = Invoke-AzRest -Method GET -Uri "https://management.azure.com/subscriptions/$SubscriptionID/resourceGroups/$ResourceGroupName/providers/Microsoft.OperationalInsights/workspaces/$MasterSentinelName/providers/Microsoft.SecurityInsights/workspaceManagerAssignments/$WorkspaceManagerAssignmentName/jobs/$AssignmentJobName`?api-version=2023-05-01-preview"
 $response = $response.content | ConvertFrom-Json
-$response[0].properties.provisioningState
+$JobStatus = $response[0].properties.provisioningState
+if($JobStatus -eq "Succeeded"){
+    Write-Host "Assignment job finished running successfully!"
+} else {
+    Write-Host "Assignment job wasn't done yet. Check the portal for the latest status."
+}
