@@ -1,0 +1,41 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "Location": {
+            "type": "String",
+            "defaultValue": "west europe"
+        },
+        "WorkspaceName": {
+            "type": "String",
+            "defaultValue": "LAW-Sentinel"
+        },
+        "DataRetention": {
+            "type": "int",
+            "defaultValue" : 30
+        }
+    },
+    "variables": {},
+    "resources": [
+        {
+            "name": "[parameters('WorkspaceName')]",
+            "type": "Microsoft.OperationalInsights/workspaces",
+            "apiVersion": "2015-11-01-preview",
+            "location": "[parameters('Location')]",
+            "properties": {
+                "retentionInDays": "[parameters('DataRetention')]"
+            }
+        },
+        {
+            "name": "default",
+            "type": "Microsoft.SecurityInsights/onboardingStates",
+            "scope": "[concat('Microsoft.OperationalInsights/workspaces/', parameters('WorkspaceName'))]",
+            "apiVersion": "2022-12-01-preview",
+            "dependsOn": [
+                "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('WorkspaceName'))]"
+            ],
+            "properties": {
+            }
+        }
+    ]
+}
